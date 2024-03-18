@@ -11,7 +11,7 @@ namespace AsyncDemo
         private Dictionary<string, string> _methodCodeDictionary = new();
         private Dictionary<int, string> _methodNameDictionary = new();
         private Dictionary<string, string> _methodCommentsDictionary = new();
-        private Action _currentAction;
+        private Action _selectedAction;
         private IActionFactory _factory;
 
         public MainForm()
@@ -23,14 +23,40 @@ namespace AsyncDemo
         {
             // Initialize dictionary with factories
             _actionMethods = new ActionsFactory().Actions;
-
-            // Add other factories as needed
-            Console.WriteLine("Populating data....");
             PopulateMaps();
             PopulateComboBox();
+        }
+
+        #region UI Setup
+        private void PopulateMaps()
+        {
+            var nameMapper = new NameToCodeMapper(@"Data\methods.json");
+
+            _methodCodeDictionary = nameMapper.MethodNameCodeMap;
+
+            int i = 1;
+            _methodNameDictionary = nameMapper.MethodNumberList.
+                Select(methodCodeDictionary => new { Key = i++, Value = methodCodeDictionary.Name }).
+                ToDictionary(x => x.Key, x => x.Value);
+            _methodCommentsDictionary = nameMapper.MethodCommentDictionary;
+        }
+        private void PopulateComboBox()
+        {
+            if (_methodNameDictionary == null)
+                throw new Exception("Error populating combobox.");
+
+            List<ComboBoxItem> list = _methodNameDictionary.Select(kvp => new ComboBoxItem(kvp.Value, kvp.Key)).ToList();
+            comboExamples.DataSource = list;
+            comboExamples.DisplayMember = "DisplayText";
+            comboExamples.ValueMember = "Value";
+
 
         }
-        public Action GetAction(int key)
+        #endregion
+
+
+        #region textbox population
+        private Action GetAction(int key)
         {
             if (_actionMethods.TryGetValue(key, out IActionFactory factory))
             {
@@ -45,48 +71,9 @@ namespace AsyncDemo
                 return () => Console.WriteLine("Action not found for key " + key);
             }
         }
-        public void PopulateMaps()
-        {
-            var nameMapper = new NameToCodeMapper("methods.json");
-
-            _methodCodeDictionary = nameMapper.MethodNameCodeMap;
-
-            int i = 1;
-            _methodNameDictionary = nameMapper.MethodNumberList.
-                Select(methodCodeDictionary => new { Key = i++, Value = methodCodeDictionary.Name }).
-                ToDictionary(x => x.Key, x => x.Value);
-            _methodCommentsDictionary = nameMapper.MethodCommentDictionary;
-        }
-        public void PopulateComboBox()
-        {
-            if (_methodNameDictionary == null)
-                throw new Exception("Error populating combobox.");
-
-            List<ComboBoxItem> list = _methodNameDictionary.Select(kvp => new ComboBoxItem(kvp.Value, kvp.Key)).ToList();
-            comboExamples.DataSource = list;
-            comboExamples.DisplayMember = "DisplayText";
-            comboExamples.ValueMember = "Value";
-
-
-        }
-
-        private void comboExamples_SelectedIndexChanged(object sender, EventArgs e)
-        {
-            txtCode.Clear();
-            richTextBox1.Clear();
-            var selected = comboExamples.SelectedItem.ToString();
-            if (selected != null)
-            {
-                PrintMethodBody(selected.Trim());
-                Action act = GetAction(((ComboBoxItem)comboExamples.SelectedItem).Value);
-                _currentAction = act;
-                PopulateComments();
-            }
-        }
-        private void PopulateComments()
+        private void PopulateComments(string methodName)
         {
             txtComments.Clear();
-            string methodName = ((ComboBoxItem)comboExamples.SelectedItem).DisplayText;
             string comments = _methodCommentsDictionary.ContainsKey(methodName) ? _methodCommentsDictionary[methodName] : "";
             txtComments.AppendText(comments);
         }
@@ -100,6 +87,7 @@ namespace AsyncDemo
             if (_methodCodeDictionary.TryGetValue(methodName, value: out string methodBody))
             {
                 txtCode.AppendText($"Method Body:\n{methodBody}");
+                FormatComments();
             }
             else
             {
@@ -110,39 +98,85 @@ namespace AsyncDemo
         }
         private void ActionFactory_MessageGenerated(object sender, string message)
         {
-            // Update the TextBox with the generated message
             AppendTextToTextBox(message);
         }
 
         private void AppendTextToTextBox(string text)
         {
             Console.WriteLine("Append" + text);
-            if (richTextBox1.InvokeRequired)
+            if (txtResults.InvokeRequired)
             {
-                richTextBox1.Invoke(new Action(() => AppendTextToTextBox(text)));
+                txtResults.Invoke(new Action(() => AppendTextToTextBox(text)));
             }
             else
             {
-                richTextBox1.AppendText(text);
+                txtResults.AppendText(text);
             }
         }
-        private void button1_Click(object sender, EventArgs e)
+        private void FormatComments()
         {
-            Application.Exit();
+            // Save the current selection start and length
+            int selectionStart = txtCode.SelectionStart;
+            int selectionLength = txtCode.SelectionLength;
+
+            // Iterate through each line
+            for (int i = 0; i < txtCode.Lines.Length; i++)
+            {
+                string line = txtCode.Lines[i];
+                if (line.TrimStart().StartsWith(@"//"))
+                {
+                    // Select the line
+                    txtCode.Select(txtCode.GetFirstCharIndexFromLine(i), line.Length);
+
+                    // Apply blue color to the selected text
+                    txtCode.SelectionColor = Color.Green;
+                }
+            }
+
+            // Restore the selection to its original position
+            txtCode.Select(selectionStart, selectionLength);
+
+            // Ensure the caret is visible
+            txtCode.ScrollToCaret();
+        }
+        private void UpdateButtons()
+        {
+            btnCancel.Enabled = (_factory is ExampleCancellingTasksFactory);
+        }
+        #endregion
+
+        #region event handlers
+        private void comboExamples_SelectedIndexChanged(object sender, EventArgs e)
+        {
+            txtCode.Clear();
+            txtResults.Clear();
+            var selected = comboExamples.SelectedItem.ToString();
+            if (selected != null)
+            {
+                PrintMethodBody(selected.Trim());
+                _selectedAction = GetAction(((ComboBoxItem)comboExamples.SelectedItem).Value);
+                UpdateButtons();
+                PopulateComments(selected.Trim());
+            }
         }
 
-        private void button2_Click(object sender, EventArgs e)
+        private void btnRun_Click(object sender, EventArgs e)
         {
-            if (_currentAction != null)
+            if (_selectedAction != null)
             {
-                _currentAction.Invoke();
+                _selectedAction.Invoke();
             }
         }
 
         private void btnCancel_Click(object sender, EventArgs e)
         {
-            if (_factory is ExampleCancellingTasksFactory)
+            if (_factory != null)
                 _factory.CancelTask();
         }
+        private void btnExit_Click(object sender, EventArgs e)
+        {
+            Application.Exit();
+        }
+        #endregion
     }
 }

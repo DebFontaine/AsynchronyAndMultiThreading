@@ -8,4 +8,14 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Remove="Data\methods.json" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="Data\methods.json">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
 </Project>

@@ -8,7 +8,7 @@ using System.Threading.Tasks;
 namespace AsyncDemo.Helpers
 {
 
-    public class MethodObject
+    public class CodeDefinitions
     {
         [JsonPropertyName("name")]
 

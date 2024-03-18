@@ -71,10 +71,17 @@ namespace AsyncDemo.Helpers
         {
             RaiseMessageGenerated("A");
         }
+        protected void Print(int result)
+        {
+            RaiseMessageGenerated("\nPrint thread's ID: " + Thread.CurrentThread.ManagedThreadId + "\n");
+            RaiseMessageGenerated("\nStarting the Print method\n");
+            Thread.Sleep(2000);
+            RaiseMessageGenerated("The result is " + result + ".\nPrint method is done\n");
+        }
 
         protected int CalculateLength(string input)
         {
-            RaiseMessageGenerated("Starting the CalculateLength method" + "\n");
+            RaiseMessageGenerated("Starting the CalculateLength method. Thread ID:" + Thread.CurrentThread.ManagedThreadId + "\n");
             Thread.Sleep(2000);
             return input.Length;
         }
@@ -236,17 +243,25 @@ namespace AsyncDemo.Helpers
         {
             return () =>
             {
-                Task<int> taskFromResult = Task.FromResult(10);
+                //Task<int> taskFromResult = Task.FromResult(10);
+                RaiseMessageGenerated("Starting Task from main Thread ID:" + Thread.CurrentThread.ManagedThreadId + "\n");
+                Task.Run(() => CalculateLength("Hello"))
+                    .ContinueWith(completedTask => Print(completedTask.Result))
+                    .ContinueWith(previousContinuation => RaiseMessageGenerated("The process is finished."));
+
+                RaiseMessageGenerated("Back in Main Thread ID:" + Thread.CurrentThread.ManagedThreadId + "\n");
+
             };
         }
     }
     public class ExampleCancellingTasksFactory : BaseActionFactory
     {
-        private CancellationTokenSource _cancellationTokenSource = new CancellationTokenSource();
+        private CancellationTokenSource _cancellationTokenSource;
         public override Action GetAction()
         {
             return () =>
-            {              
+            {
+                _cancellationTokenSource = new CancellationTokenSource();
                 var task = Task.Run(
                     () => NeverendingMethod(_cancellationTokenSource),
                     _cancellationTokenSource.Token)
@@ -374,6 +389,7 @@ namespace AsyncDemo.Helpers
         {
             return () =>
             {
+                RaiseMessageGenerated("\nStarting in caller Thread Id:" + Thread.CurrentThread.ManagedThreadId + "\n");
                 var taskFromAsyncMethod = Process("Fun with async and await");
                 RaiseMessageGenerated("\nBack in original caller.\n");
 
@@ -381,8 +397,8 @@ namespace AsyncDemo.Helpers
         }
         private async Task<int> CalculateLengthAsync(string input)
         {
-            RaiseMessageGenerated("Starting the CalculateLengthAsync method");
-            await Task.Delay(2000);
+            RaiseMessageGenerated("Starting the CalculateLengthAsync method. Thread ID:" + Thread.CurrentThread.ManagedThreadId + "\n");
+            await Task.Delay(4000);
             RaiseMessageGenerated("\nCalculateLengthAsync is done\n");
             return input.Length;
         }
@@ -394,11 +410,11 @@ namespace AsyncDemo.Helpers
                 var length = await CalculateLengthAsync(input);
                 //control will go back to caller until the Calculate
                 //LengthAsync is completed
-
+                RaiseMessageGenerated("\nBack in Process Method. About to call PrintAsync: " + Thread.CurrentThread.ManagedThreadId + "\n");
                 //Once complete then PrintAsync will be invoked
                 await PrintAsync(length);
                 //control will again go back to caller until PrintAsync is done
-                RaiseMessageGenerated("\nThe process is finished.\n");
+                RaiseMessageGenerated("\nBack in Process Method.The process is finished.\n");
             }
             catch (NullReferenceException ex)
             {
@@ -409,7 +425,7 @@ namespace AsyncDemo.Helpers
         {
             RaiseMessageGenerated("\nPrintAsync thread's ID: " + Thread.CurrentThread.ManagedThreadId + "\n");
             RaiseMessageGenerated("\nStarting the Print method\n");
-            await Task.Delay(2000);
+            await Task.Delay(4000);
             RaiseMessageGenerated("The result is " + result + ".\nPrint method is done");
         }
     }
